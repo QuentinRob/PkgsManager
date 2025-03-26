@@ -1,0 +1,35 @@
+{
+    "configurations": [
+        {
+            "type": "go",
+            "name": "pkgsmanager",
+            "goExecPath": "/usr/local/go/bin/go",
+            "buildParams": [
+                "$PROJECT_DIR$/main.go"
+            ]
+        },
+        {
+            "type": "go",
+            "name": "pkgsmanager config init",
+            "goExecPath": "/usr/local/go/bin/go",
+            "buildParams": [
+                "$PROJECT_DIR$/main.go"
+            ],
+            "runParams": [
+                "config",
+                "init"
+            ]
+        },
+        {
+            "type": "go",
+            "name": "pkgsmanager sync",
+            "goExecPath": "/usr/local/go/bin/go",
+            "buildParams": [
+                "$PROJECT_DIR$/main.go"
+            ],
+            "runParams": [
+                "sync"
+            ]
+        }
+    ]
+}

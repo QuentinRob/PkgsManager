@@ -1,0 +1,5 @@
+{
+    "autoSave": "AfterDelay",
+    "editor.formatOnSave": true,
+    "prettier.mode": "Disabled"
+}
