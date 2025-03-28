@@ -30,7 +30,8 @@ import (
 	"github.com/spf13/viper"
 	"os"
 	"os/exec"
-	"qrobcis/pkgsmanager/internal"
+	"qrobcis/pkgsmanager/internal/models"
+	"qrobcis/pkgsmanager/internal/types/provider"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -42,6 +43,8 @@ var syncCmd = &cobra.Command{
 	Short: "Install/Remove packages based on the configuration file",
 	Run: func(cmd *cobra.Command, args []string) {
 		pterm.Info.Println("Synchronizing packages...")
+		pterm.Println()
+		updateApt()
 		totalRequestedPackages := 0
 		totalInstalledPackages := 0
 		groups := viper.AllKeys()
@@ -58,7 +61,7 @@ var syncCmd = &cobra.Command{
 
 func installGroup(groupName string) (success int, requested int) {
 	success = 0
-	var pkgsConfigurations []internal.PackageConfiguration
+	var pkgsConfigurations []models.PackageConfiguration
 	if err := viper.UnmarshalKey(groupName, &pkgsConfigurations); err != nil {
 		panic(err)
 	}
@@ -78,18 +81,20 @@ func installGroup(groupName string) (success int, requested int) {
 	return
 }
 
-func installPackage(pkgConfiguration internal.PackageConfiguration, progress *pterm.ProgressbarPrinter) (successful bool) {
+func installPackage(pkgConfiguration models.PackageConfiguration, progress *pterm.ProgressbarPrinter) (successful bool) {
 
 	progress.UpdateTitle("Installing package " + pkgConfiguration.Name)
 
 	var cmd *exec.Cmd
-	if pkgConfiguration.Provider == "" || pkgConfiguration.Provider == "apt" {
+	if pkgConfiguration.Provider == provider.Unset || pkgConfiguration.Provider == provider.APT {
 		if pkgConfiguration.SourceList != "" {
 			addSourceList(pkgConfiguration)
 		}
 		cmd = exec.Command("sudo", "apt-get", "install", "-y", pkgConfiguration.Name)
-	} else if pkgConfiguration.Provider == "go" {
+	} else if pkgConfiguration.Provider == provider.Golang {
 		cmd = buildGoCommand(pkgConfiguration)
+	} else if pkgConfiguration.Provider == provider.NPM {
+		cmd = buildNpmCommand(pkgConfiguration)
 	} else {
 		pterm.Warning.Println("Provider not supported: " + pkgConfiguration.Provider)
 		successful = false
@@ -104,7 +109,19 @@ func installPackage(pkgConfiguration internal.PackageConfiguration, progress *pt
 		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
 		successful = false
 	} else {
-		pterm.Success.Println("Installed package " + pkgConfiguration.Name)
+		var providerStyle *pterm.Style
+		if pkgConfiguration.Provider == provider.APT || pkgConfiguration.Provider == provider.Unset {
+			pkgConfiguration.Provider = provider.APT
+			providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgRed)
+		} else if pkgConfiguration.Provider == provider.Golang {
+			providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgBlue)
+		} else if pkgConfiguration.Provider == provider.NPM {
+			providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgGreen)
+		} else {
+			providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgDefault)
+		}
+		paddedProvider := providerStyle.Sprintf("%-5s", pkgConfiguration.Provider)
+		pterm.FgGreen.Println("| " + paddedProvider + "| Installed package " + pkgConfiguration.Name)
 		successful = true
 	}
 	progress.Increment()
@@ -112,7 +129,19 @@ func installPackage(pkgConfiguration internal.PackageConfiguration, progress *pt
 	return
 }
 
-func buildGoCommand(pkgConfiguration internal.PackageConfiguration) (cmd *exec.Cmd) {
+func buildNpmCommand(pkgConfiguration models.PackageConfiguration) (cmd *exec.Cmd) {
+	packageNameVersionned := ""
+	if pkgConfiguration.Version != "" {
+		packageNameVersionned = pkgConfiguration.Name + "@" + pkgConfiguration.Version
+	} else {
+		packageNameVersionned = pkgConfiguration.Name
+	}
+	cmd = exec.Command("npm", "install", "-g", packageNameVersionned)
+
+	return
+}
+
+func buildGoCommand(pkgConfiguration models.PackageConfiguration) (cmd *exec.Cmd) {
 	packageNameVersionned := ""
 	if pkgConfiguration.Version != "" {
 		packageNameVersionned = pkgConfiguration.Name + "@" + pkgConfiguration.Version
@@ -145,7 +174,7 @@ func installGPGKey(GPGKey string, packageName string) (keyPath string) {
 	return
 }
 
-func addSourceList(pkgConfiguration internal.PackageConfiguration) {
+func addSourceList(pkgConfiguration models.PackageConfiguration) {
 	sourceListPath := "/etc/apt/sources.list.d/" + pkgConfiguration.Name + ".list"
 	if _, err := os.Stat(sourceListPath); errors.Is(err, os.ErrNotExist) {
 		sourceListSignature := ""
@@ -168,16 +197,18 @@ func addSourceList(pkgConfiguration internal.PackageConfiguration) {
 			pterm.Success.Println("Added source list: " + sourceList)
 		}
 
-		cmdUpdate := exec.Command("sudo", "apt", "update")
-		errBufferUpdate := new(bytes.Buffer)
-		cmdUpdate.Stderr = errBufferUpdate
-		errUpdate := cmdUpdate.Run()
-		if errUpdate != nil {
-			pterm.Error.Println("Failed to update apt sources")
-			pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
-		} else {
-			pterm.Success.Println("Updated apt sources")
-		}
+		updateApt()
+	}
+}
+
+func updateApt() {
+	cmdUpdate := exec.Command("sudo", "apt", "update")
+	errBufferUpdate := new(bytes.Buffer)
+	cmdUpdate.Stderr = errBufferUpdate
+	errUpdate := cmdUpdate.Run()
+	if errUpdate != nil {
+		pterm.Error.Println("Failed to update apt sources")
+		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBufferUpdate.String())
 	}
 }
 
