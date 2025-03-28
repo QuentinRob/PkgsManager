@@ -26,6 +26,8 @@ import (
 	"github.com/pterm/pterm"
 	"github.com/spf13/viper"
 	"os"
+	"qrobcis/pkgsmanager/internal/models"
+	"qrobcis/pkgsmanager/internal/types/provider"
 
 	"github.com/spf13/cobra"
 )
@@ -41,7 +43,7 @@ var initCmd = &cobra.Command{
 		viper.AddConfigPath(home)
 		viper.SetConfigType("yaml")
 		viper.SetConfigName(".pkgsmanager")
-		viper.Set("default", [...]string{"git", "vim"})
+		viper.Set("default", [...]models.PackageConfiguration{{Name: "git", Provider: provider.APT}, {Name: "vim", Provider: provider.APT}})
 		err = viper.SafeWriteConfig()
 		if err != nil {
 			spinner.Info()
