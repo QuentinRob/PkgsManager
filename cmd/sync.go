@@ -54,6 +54,8 @@ var syncCmd = &cobra.Command{
 			totalRequestedPackages += requested
 		}
 
+		cleanApt()
+
 		pterm.Println()
 		pterm.Info.Println("Installed ", totalInstalledPackages, "/", totalRequestedPackages, " packages.")
 	},
@@ -202,13 +204,24 @@ func addSourceList(pkgConfiguration models.PackageConfiguration) {
 }
 
 func updateApt() {
-	cmdUpdate := exec.Command("sudo", "apt", "update")
-	errBufferUpdate := new(bytes.Buffer)
-	cmdUpdate.Stderr = errBufferUpdate
-	errUpdate := cmdUpdate.Run()
-	if errUpdate != nil {
+	cmd := exec.Command("sudo", "apt-get", "update")
+	errBuffer := new(bytes.Buffer)
+	cmd.Stderr = errBuffer
+	err := cmd.Run()
+	if err != nil {
 		pterm.Error.Println("Failed to update apt sources")
-		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBufferUpdate.String())
+		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
+	}
+}
+
+func cleanApt() {
+	cmd := exec.Command("sudo", "apt-get", "clean", "-y")
+	errBuffer := new(bytes.Buffer)
+	cmd.Stderr = errBuffer
+	err := cmd.Run()
+	if err != nil {
+		pterm.Error.Println("Failed to update apt sources")
+		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
 	}
 }
 
