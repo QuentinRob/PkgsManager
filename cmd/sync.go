@@ -111,22 +111,28 @@ func installPackage(pkgConfiguration models.PackageConfiguration, progress *pter
 		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
 		successful = false
 	} else {
-		var providerStyle *pterm.Style
-		if pkgConfiguration.Provider == provider.APT || pkgConfiguration.Provider == provider.Unset {
-			pkgConfiguration.Provider = provider.APT
-			providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgRed)
-		} else if pkgConfiguration.Provider == provider.Golang {
-			providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgBlue)
-		} else if pkgConfiguration.Provider == provider.NPM {
-			providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgGreen)
-		} else {
-			providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgDefault)
-		}
-		paddedProvider := providerStyle.Sprintf("%-5s", pkgConfiguration.Provider)
+		paddedProvider := formatProvider(pkgConfiguration)
 		pterm.FgGreen.Println("| " + paddedProvider + "| Installed package " + pkgConfiguration.Name)
 		successful = true
 	}
 	progress.Increment()
+
+	return
+}
+
+func formatProvider(pkgConfiguration models.PackageConfiguration) (paddedProvider string) {
+	var providerStyle *pterm.Style
+	if pkgConfiguration.Provider == provider.APT || pkgConfiguration.Provider == provider.Unset {
+		pkgConfiguration.Provider = provider.APT
+		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgRed)
+	} else if pkgConfiguration.Provider == provider.Golang {
+		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgBlue)
+	} else if pkgConfiguration.Provider == provider.NPM {
+		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgGreen)
+	} else {
+		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgDefault)
+	}
+	paddedProvider = providerStyle.Sprintf("%-5s", pkgConfiguration.Provider)
 
 	return
 }
