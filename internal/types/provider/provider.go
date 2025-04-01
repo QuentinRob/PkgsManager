@@ -7,4 +7,6 @@ const (
     Golang Provider = "go"
     APT    Provider = "apt"
     NPM    Provider = "npm"
+    Gem    Provider = "gem"
+    Pip    Provider = "pip"
 )

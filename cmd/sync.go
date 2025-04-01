@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	"qrobcis/pkgsmanager/internal/models"
+	"qrobcis/pkgsmanager/internal/providers"
 	"qrobcis/pkgsmanager/internal/types/provider"
 	"strings"
 
@@ -44,7 +45,18 @@ var syncCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		pterm.Info.Println("Synchronizing packages...")
 		pterm.Println()
-		updateApt()
+
+		providersMap := initProviders()
+
+		aptProvider := providers.NewAptProvider()
+
+		err, cmdErr := aptProvider.UpdateRegistry()
+		if err != nil {
+			pterm.Error.Println(err)
+			pterm.DefaultParagraph.WithMaxWidth(60).Println(cmdErr)
+			os.Exit(1)
+			return
+		}
 		totalRequestedPackages := 0
 		totalInstalledPackages := 0
 		groups := viper.AllKeys()
@@ -54,11 +66,23 @@ var syncCmd = &cobra.Command{
 			totalRequestedPackages += requested
 		}
 
-		cleanApt()
+		err, cmdErr = aptProvider.CleanRegistry()
+		if err != nil {
+			pterm.Error.Println(err)
+			pterm.DefaultParagraph.WithMaxWidth(60).Println(cmdErr)
+			os.Exit(1)
+			return
+		}
 
 		pterm.Println()
 		pterm.Info.Println("Installed ", totalInstalledPackages, "/", totalRequestedPackages, " packages.")
 	},
+}
+
+func initProviders() (providersMap map[provider.Provider]providers.PackageProvider) {
+	providersMap = make(map[provider.Provider]providers.PackageProvider)
+	
+	return
 }
 
 func installGroup(groupName string) (success int, requested int) {
@@ -83,23 +107,23 @@ func installGroup(groupName string) (success int, requested int) {
 	return
 }
 
-func installPackage(pkgConfiguration models.PackageConfiguration, progress *pterm.ProgressbarPrinter) (successful bool) {
+func installPackage(pkgConfiguration models.PackageConfiguration, progress *pterm.ProgressbarPrinter) (err error) {
 
 	progress.UpdateTitle("Installing package " + pkgConfiguration.Name)
 
 	var cmd *exec.Cmd
 	if pkgConfiguration.Provider == provider.Unset || pkgConfiguration.Provider == provider.APT {
-		if pkgConfiguration.SourceList != "" {
-			addSourceList(pkgConfiguration)
-		}
-		cmd = exec.Command("sudo", "apt-get", "install", "-y", pkgConfiguration.Name)
+		err =
 	} else if pkgConfiguration.Provider == provider.Golang {
 		cmd = buildGoCommand(pkgConfiguration)
 	} else if pkgConfiguration.Provider == provider.NPM {
 		cmd = buildNpmCommand(pkgConfiguration)
+	} else if pkgConfiguration.Provider == provider.Gem {
+		cmd = buildGemCommand(pkgConfiguration)
+	} else if pkgConfiguration.Provider == provider.Pip {
+		cmd = buildPipCommand(pkgConfiguration)
 	} else {
-		pterm.Warning.Println("Provider not supported: " + pkgConfiguration.Provider)
-		successful = false
+		err = errors.New(fmt.Sprintf("Provider not supported: %s", pkgConfiguration.Provider))
 		return
 	}
 
@@ -124,15 +148,48 @@ func formatProvider(pkgConfiguration models.PackageConfiguration) (paddedProvide
 	var providerStyle *pterm.Style
 	if pkgConfiguration.Provider == provider.APT || pkgConfiguration.Provider == provider.Unset {
 		pkgConfiguration.Provider = provider.APT
-		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgRed)
+		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgYellow)
 	} else if pkgConfiguration.Provider == provider.Golang {
 		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgBlue)
 	} else if pkgConfiguration.Provider == provider.NPM {
 		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgGreen)
+	} else if pkgConfiguration.Provider == provider.Gem {
+		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgRed)
+	} else if pkgConfiguration.Provider == provider.Pip {
+		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgCyan)
 	} else {
 		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgDefault)
 	}
 	paddedProvider = providerStyle.Sprintf("%-5s", pkgConfiguration.Provider)
+
+	return
+}
+
+func buildPipCommand(pkgConfiguration models.PackageConfiguration) (cmd *exec.Cmd) {
+	versionnedName := pkgConfiguration.Name
+
+	if pkgConfiguration.Version != "" {
+		versionnedName = "'" + versionnedName + "==" + pkgConfiguration.Version + "'"
+	}
+
+	args := []string{"install", versionnedName}
+
+	cmd = exec.Command("pipx", args...)
+
+	return
+}
+
+func buildGemCommand(pkgConfiguration models.PackageConfiguration) (cmd *exec.Cmd) {
+	var versionArg []string
+
+	if pkgConfiguration.Version != "" {
+		versionArg = []string{"-v", pkgConfiguration.Version}
+	}
+
+	args := []string{"gem", "install", pkgConfiguration.Name}
+	args = append(args, versionArg...)
+
+	cmd = exec.Command("sudo", args...)
 
 	return
 }
@@ -206,28 +263,6 @@ func addSourceList(pkgConfiguration models.PackageConfiguration) {
 		}
 
 		updateApt()
-	}
-}
-
-func updateApt() {
-	cmd := exec.Command("sudo", "apt-get", "update")
-	errBuffer := new(bytes.Buffer)
-	cmd.Stderr = errBuffer
-	err := cmd.Run()
-	if err != nil {
-		pterm.Error.Println("Failed to update apt sources")
-		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
-	}
-}
-
-func cleanApt() {
-	cmd := exec.Command("sudo", "apt-get", "clean", "-y")
-	errBuffer := new(bytes.Buffer)
-	cmd.Stderr = errBuffer
-	err := cmd.Run()
-	if err != nil {
-		pterm.Error.Println("Failed to update apt sources")
-		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
 	}
 }
 
