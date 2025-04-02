@@ -20,34 +20,37 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-package provider
+package models
 
-type Provider string
-
-const (
-    APT     Provider = "apt"
-    Gem     Provider = "gem"
-    Golang  Provider = "go"
-    NPM     Provider = "npm"
-    Pip     Provider = "pip"
-    Unknown Provider = "Unknown"
-    Unset   Provider = ""
+import (
+    "qrobcis/pkgsmanager/internal/types/provider"
 )
 
-func ToProvider(providerName string) Provider {
-    if providerName == string(APT) {
-        return APT
-        //    } else if providerName == string(Gem) {
-        //        return Gem
-        //    } else if providerName == string(Golang) {
-        //        return Golang
-        //    } else if providerName == string(NPM) {
-        //        return NPM
-        //    } else if providerName == string(Pip) {
-        //        return Pip
-    } else if providerName == string(Unset) {
-        return Unset
-    } else {
-        return Unknown
+type GroupConfiguration struct {
+    Name     string
+    Packages map[string]*PackageConfiguration
+}
+
+func NewGroupConfiguration(name string) *GroupConfiguration {
+    return &GroupConfiguration{
+        Name:     name,
+        Packages: make(map[string]*PackageConfiguration),
     }
+}
+
+func (group *GroupConfiguration) AddPackage(configuration *PackageConfiguration) {
+    group.Packages[configuration.Name] = configuration
+}
+
+func (group *GroupConfiguration) HasProvider(provider provider.Provider) (hasProvider bool) {
+    hasProvider = false
+
+    for _, configuration := range group.Packages {
+        if configuration.Provider == provider {
+            hasProvider = true
+            return
+        }
+    }
+
+    return
 }

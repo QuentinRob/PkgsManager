@@ -24,10 +24,33 @@ package models
 
 import "qrobcis/pkgsmanager/internal/types/provider"
 
+type RawPackageConfiguration struct {
+    Name       string `yaml:"name"`
+    GPGKey     string `yaml:"gpgKey"`
+    SourceList string `yaml:"souceList"`
+    Provider   string `yaml:"provider"`
+    Version    string `yaml:"version"`
+}
+
 type PackageConfiguration struct {
     Name       string            `yaml:"name"`
     GPGKey     string            `yaml:"gpgKey"`
     SourceList string            `yaml:"souceList"`
     Provider   provider.Provider `yaml:"provider"`
     Version    string            `yaml:"version"`
+}
+
+func NewPackageConfiguration(name string, gpgKey string, souceList string, providerName string, version string) *PackageConfiguration {
+    providerValue := provider.ToProvider(providerName)
+    if providerValue == provider.Unset {
+        providerValue = provider.APT
+    }
+
+    return &PackageConfiguration{
+        GPGKey:     gpgKey,
+        Name:       name,
+        Provider:   providerValue,
+        Version:    version,
+        SourceList: souceList,
+    }
 }

@@ -24,6 +24,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/pterm/pterm"
@@ -43,14 +44,15 @@ var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Install/Remove packages based on the configuration file",
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
 		pterm.Info.Println("Synchronizing packages...")
 		pterm.Println()
 
 		providersMap := initProviders()
+		configuration := initConfiguration()
+		ctx = context.WithValue(ctx, "providers", providersMap)
 
-		aptProvider := providers.NewAptProvider()
-
-		err, cmdErr := aptProvider.UpdateRegistry()
+		err, cmdErr := providersMap[provider.APT].UpdateRegistry()
 		if err != nil {
 			pterm.Error.Println(err)
 			pterm.DefaultParagraph.WithMaxWidth(60).Println(cmdErr)
@@ -59,14 +61,14 @@ var syncCmd = &cobra.Command{
 		}
 		totalRequestedPackages := 0
 		totalInstalledPackages := 0
-		groups := viper.AllKeys()
-		for _, groupName := range groups {
-			intalled, requested := installGroup(groupName)
+
+		for _, group := range configuration {
+			intalled, requested := installGroup(ctx, group)
 			totalInstalledPackages += intalled
 			totalRequestedPackages += requested
 		}
 
-		err, cmdErr = aptProvider.CleanRegistry()
+		err, cmdErr = providersMap[provider.APT].CleanRegistry()
 		if err != nil {
 			pterm.Error.Println(err)
 			pterm.DefaultParagraph.WithMaxWidth(60).Println(cmdErr)
@@ -81,70 +83,80 @@ var syncCmd = &cobra.Command{
 
 func initProviders() (providersMap map[provider.Provider]providers.PackageProvider) {
 	providersMap = make(map[provider.Provider]providers.PackageProvider)
-	
+	providersMap[provider.APT] = providers.NewAptProvider()
+
 	return
 }
 
-func installGroup(groupName string) (success int, requested int) {
-	success = 0
-	var pkgsConfigurations []models.PackageConfiguration
-	if err := viper.UnmarshalKey(groupName, &pkgsConfigurations); err != nil {
-		panic(err)
+func initConfiguration() (configuration map[string]*models.GroupConfiguration) {
+	groups := viper.AllKeys()
+	configuration = make(map[string]*models.GroupConfiguration)
+
+	for _, groupName := range groups {
+		groupConfiguration := models.NewGroupConfiguration(groupName)
+		configuration[groupName] = groupConfiguration
+
+		var packagesConfigurations []models.RawPackageConfiguration
+		if err := viper.UnmarshalKey(groupName, &packagesConfigurations); err != nil {
+			panic(err)
+		}
+		for _, pkgConfiguration := range packagesConfigurations {
+			groupConfiguration.AddPackage(models.NewPackageConfiguration(
+				pkgConfiguration.Name,
+				pkgConfiguration.GPGKey,
+				pkgConfiguration.SourceList,
+				pkgConfiguration.Provider,
+				pkgConfiguration.Version,
+			))
+		}
 	}
-	requested = len(pkgsConfigurations)
-	pterm.DefaultSection.Println("Installing group: " + groupName)
-	progress, _ := pterm.DefaultProgressbar.WithRemoveWhenDone(true).WithTotal(len(pkgsConfigurations)).WithTitle(fmt.Sprint("Installing packages for group:", pterm.Blue(" ", groupName))).Start()
-	for _, pkgConfiguration := range pkgsConfigurations {
-		isSuccessful := installPackage(pkgConfiguration, progress)
-		if isSuccessful == true {
-			success += 1
+
+	return
+}
+
+func installGroup(ctx context.Context, group *models.GroupConfiguration) (success int, requested int) {
+	success = 0
+	requested = len(group.Packages)
+
+	pterm.DefaultSection.Println("Installing group: " + group.Name)
+	progress, _ := pterm.DefaultProgressbar.WithRemoveWhenDone(true).WithTotal(len(group.Packages)).WithTitle(fmt.Sprint("Installing packages for group:", pterm.Blue(" ", group.Name))).Start()
+
+	for _, packageConfiguration := range group.Packages {
+		err, cmdErr := installPackage(ctx, packageConfiguration, progress)
+		if err != nil {
+			pterm.Error.Println(err)
+			if cmdErr != nil {
+				pterm.DefaultParagraph.Printfln(cmdErr.Error())
+			}
+		} else {
+			paddedProvider := formatProvider(packageConfiguration)
+			pterm.FgGreen.Println("| " + paddedProvider + "| Installed package " + packageConfiguration.Name)
 		}
 	}
 	pterm.Println()
-	pterm.Info.Println("Successfully installed ", success, "/", len(pkgsConfigurations), " packages.")
+	pterm.Info.Println("Successfully installed ", success, "/", len(group.Packages), " packages.")
 	pterm.Println()
 
 	return
 }
 
-func installPackage(pkgConfiguration models.PackageConfiguration, progress *pterm.ProgressbarPrinter) (err error) {
+func installPackage(ctx context.Context, pkgConfiguration *models.PackageConfiguration, progress *pterm.ProgressbarPrinter) (err error, cmdErr error) {
 
 	progress.UpdateTitle("Installing package " + pkgConfiguration.Name)
 
-	var cmd *exec.Cmd
-	if pkgConfiguration.Provider == provider.Unset || pkgConfiguration.Provider == provider.APT {
-		err =
-	} else if pkgConfiguration.Provider == provider.Golang {
-		cmd = buildGoCommand(pkgConfiguration)
-	} else if pkgConfiguration.Provider == provider.NPM {
-		cmd = buildNpmCommand(pkgConfiguration)
-	} else if pkgConfiguration.Provider == provider.Gem {
-		cmd = buildGemCommand(pkgConfiguration)
-	} else if pkgConfiguration.Provider == provider.Pip {
-		cmd = buildPipCommand(pkgConfiguration)
+	var providersMap map[provider.Provider]providers.PackageProvider
+	providersMap = ctx.Value("providers").(map[provider.Provider]providers.PackageProvider)
+	if pkgConfiguration.Provider != provider.Unknown {
+		err, cmdErr = providersMap[pkgConfiguration.Provider].InstallPackage(pkgConfiguration)
 	} else {
 		err = errors.New(fmt.Sprintf("Provider not supported: %s", pkgConfiguration.Provider))
-		return
-	}
-
-	errBuffer := new(bytes.Buffer)
-	cmd.Stderr = errBuffer
-	err := cmd.Run()
-	if err != nil {
-		pterm.Error.Println("Failed to install " + pkgConfiguration.Name)
-		pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
-		successful = false
-	} else {
-		paddedProvider := formatProvider(pkgConfiguration)
-		pterm.FgGreen.Println("| " + paddedProvider + "| Installed package " + pkgConfiguration.Name)
-		successful = true
 	}
 	progress.Increment()
 
 	return
 }
 
-func formatProvider(pkgConfiguration models.PackageConfiguration) (paddedProvider string) {
+func formatProvider(pkgConfiguration *models.PackageConfiguration) (paddedProvider string) {
 	var providerStyle *pterm.Style
 	if pkgConfiguration.Provider == provider.APT || pkgConfiguration.Provider == provider.Unset {
 		pkgConfiguration.Provider = provider.APT
@@ -262,7 +274,7 @@ func addSourceList(pkgConfiguration models.PackageConfiguration) {
 			pterm.Success.Println("Added source list: " + sourceList)
 		}
 
-		updateApt()
+		//		updateApt()
 	}
 }
 
