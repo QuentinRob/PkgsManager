@@ -23,20 +23,16 @@ THE SOFTWARE.
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/pterm/pterm"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"os"
-	"os/exec"
 	"qrobcis/pkgsmanager/internal/models"
 	"qrobcis/pkgsmanager/internal/providers"
 	"qrobcis/pkgsmanager/internal/types/provider"
-	"strings"
-
-	"github.com/spf13/cobra"
 )
 
 // syncCmd represents the sync command
@@ -84,6 +80,9 @@ var syncCmd = &cobra.Command{
 func initProviders() (providersMap map[provider.Provider]providers.PackageProvider) {
 	providersMap = make(map[provider.Provider]providers.PackageProvider)
 	providersMap[provider.APT] = providers.NewAptProvider()
+	providersMap[provider.NPM] = providers.NewNpmProvider()
+	providersMap[provider.Gem] = providers.NewGemProvider()
+	providersMap[provider.Golang] = providers.NewGoProvider()
 
 	return
 }
@@ -131,6 +130,7 @@ func installGroup(ctx context.Context, group *models.GroupConfiguration) (succes
 		} else {
 			paddedProvider := formatProvider(packageConfiguration)
 			pterm.FgGreen.Println("| " + paddedProvider + "| Installed package " + packageConfiguration.Name)
+			success += 1
 		}
 	}
 	pterm.Println()
@@ -175,107 +175,6 @@ func formatProvider(pkgConfiguration *models.PackageConfiguration) (paddedProvid
 	paddedProvider = providerStyle.Sprintf("%-5s", pkgConfiguration.Provider)
 
 	return
-}
-
-func buildPipCommand(pkgConfiguration models.PackageConfiguration) (cmd *exec.Cmd) {
-	versionnedName := pkgConfiguration.Name
-
-	if pkgConfiguration.Version != "" {
-		versionnedName = "'" + versionnedName + "==" + pkgConfiguration.Version + "'"
-	}
-
-	args := []string{"install", versionnedName}
-
-	cmd = exec.Command("pipx", args...)
-
-	return
-}
-
-func buildGemCommand(pkgConfiguration models.PackageConfiguration) (cmd *exec.Cmd) {
-	var versionArg []string
-
-	if pkgConfiguration.Version != "" {
-		versionArg = []string{"-v", pkgConfiguration.Version}
-	}
-
-	args := []string{"gem", "install", pkgConfiguration.Name}
-	args = append(args, versionArg...)
-
-	cmd = exec.Command("sudo", args...)
-
-	return
-}
-
-func buildNpmCommand(pkgConfiguration models.PackageConfiguration) (cmd *exec.Cmd) {
-	packageNameVersionned := ""
-	if pkgConfiguration.Version != "" {
-		packageNameVersionned = pkgConfiguration.Name + "@" + pkgConfiguration.Version
-	} else {
-		packageNameVersionned = pkgConfiguration.Name
-	}
-	cmd = exec.Command("npm", "install", "-g", packageNameVersionned)
-
-	return
-}
-
-func buildGoCommand(pkgConfiguration models.PackageConfiguration) (cmd *exec.Cmd) {
-	packageNameVersionned := ""
-	if pkgConfiguration.Version != "" {
-		packageNameVersionned = pkgConfiguration.Name + "@" + pkgConfiguration.Version
-	} else {
-		packageNameVersionned = pkgConfiguration.Name
-	}
-	cmd = exec.Command("go", "install", packageNameVersionned)
-
-	return
-}
-
-func installGPGKey(GPGKey string, packageName string) (keyPath string) {
-	keyPath = "/etc/apt/keyrings/" + packageName + "-apt-keyring.gpg"
-	if _, err := os.Stat(keyPath); errors.Is(err, os.ErrNotExist) {
-		cmdCurl := exec.Command("curl", "-fsSL", GPGKey)
-		cmd := exec.Command("sudo", "gpg", "--dearmor", "-o", keyPath)
-		cmd.Stdin, _ = cmdCurl.StdoutPipe()
-		errBuffer := new(bytes.Buffer)
-		cmd.Stderr = errBuffer
-		err := cmd.Start()
-		_ = cmdCurl.Run()
-		err = cmd.Wait()
-		if err != nil {
-			pterm.Error.Println("Failed to add GPG Key: " + GPGKey)
-			pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
-		} else {
-			pterm.Success.Println("Installed GPG Key: " + GPGKey)
-		}
-	}
-	return
-}
-
-func addSourceList(pkgConfiguration models.PackageConfiguration) {
-	sourceListPath := "/etc/apt/sources.list.d/" + pkgConfiguration.Name + ".list"
-	if _, err := os.Stat(sourceListPath); errors.Is(err, os.ErrNotExist) {
-		sourceListSignature := ""
-		if pkgConfiguration.GPGKey != "" {
-			keyPath := installGPGKey(pkgConfiguration.GPGKey, pkgConfiguration.Name)
-			sourceListSignature = "[arch=amd64 signed-by=" + keyPath + "]"
-		}
-
-		sourceList := "deb " + sourceListSignature + " " + pkgConfiguration.SourceList
-
-		cmd := exec.Command("sudo", "tee", "-a", sourceListPath)
-		cmd.Stdin = strings.NewReader(sourceList)
-		errBuffer := new(bytes.Buffer)
-		cmd.Stderr = errBuffer
-		err := cmd.Run()
-		if err != nil {
-			pterm.Error.Println("Failed to add source list: " + sourceList)
-			pterm.DefaultParagraph.WithMaxWidth(60).Println(errBuffer.String())
-		} else {
-			pterm.Success.Println("Added source list: " + sourceList)
-		}
-
-		//		updateApt()
-	}
 }
 
 func init() {

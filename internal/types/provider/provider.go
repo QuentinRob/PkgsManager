@@ -37,12 +37,12 @@ const (
 func ToProvider(providerName string) Provider {
     if providerName == string(APT) {
         return APT
-        //    } else if providerName == string(Gem) {
-        //        return Gem
-        //    } else if providerName == string(Golang) {
-        //        return Golang
-        //    } else if providerName == string(NPM) {
-        //        return NPM
+    } else if providerName == string(Gem) {
+        return Gem
+    } else if providerName == string(Golang) {
+        return Golang
+    } else if providerName == string(NPM) {
+        return NPM
         //    } else if providerName == string(Pip) {
         //        return Pip
     } else if providerName == string(Unset) {

@@ -1,5 +1,5 @@
 /*
-Copyright © 2025 Quentin ROBCIS 
+Copyright © 2025 Quentin ROBCIS
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -26,8 +26,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"qrobcis/pkgsmanager/internal/models"
+	"strings"
 )
 
 type AptProvider struct {
@@ -35,6 +37,13 @@ type AptProvider struct {
 }
 
 func (apt *AptProvider) InstallPackage(pkgConfiguration *models.PackageConfiguration) (err error, cmdErr error) {
+	if pkgConfiguration.SourceList != "" {
+		err, cmdErr = apt.addSourceList(pkgConfiguration)
+		if err != nil || cmdErr != nil {
+			return
+		}
+	}
+
 	name, args := apt.buildCommand(apt.InstallCommand, true, pkgConfiguration.Name)
 	cmd := exec.Command(name, args...)
 
@@ -92,6 +101,49 @@ func (apt *AptProvider) buildCommand(subCommand string, autoApprove bool, option
 		args = append(args, options...)
 	}
 
+	return
+}
+
+func (apt *AptProvider) installGPGKey(GPGKey string, packageName string) (keyPath string, err error) {
+	keyPath = "/etc/apt/keyrings/" + packageName + "-apt-keyring.gpg"
+	if _, err := os.Stat(keyPath); errors.Is(err, os.ErrNotExist) {
+		cmdCurl := exec.Command("curl", "-fsSL", GPGKey)
+		cmd := exec.Command("sudo", "gpg", "--dearmor", "-o", keyPath)
+		cmd.Stdin, _ = cmdCurl.StdoutPipe()
+		errBuffer := new(bytes.Buffer)
+		cmd.Stderr = errBuffer
+		err = cmd.Start()
+		_ = cmdCurl.Run()
+		err = cmd.Wait()
+	}
+	return
+}
+
+func (apt *AptProvider) addSourceList(pkgConfiguration *models.PackageConfiguration) (err error, cmdErr error) {
+	sourceListPath := "/etc/apt/sources.list.d/" + pkgConfiguration.Name + ".list"
+	if _, err = os.Stat(sourceListPath); errors.Is(err, os.ErrNotExist) {
+		sourceListSignature := ""
+		if pkgConfiguration.GPGKey != "" {
+			var keyPath string
+			keyPath, err = apt.installGPGKey(pkgConfiguration.GPGKey, pkgConfiguration.Name)
+			if err != nil {
+				return
+			}
+			sourceListSignature = "[arch=amd64 signed-by=" + keyPath + "]"
+		}
+
+		sourceList := "deb " + sourceListSignature + " " + pkgConfiguration.SourceList
+
+		cmd := exec.Command("sudo", "tee", "-a", sourceListPath)
+		cmd.Stdin = strings.NewReader(sourceList)
+		errBuffer := new(bytes.Buffer)
+		cmd.Stderr = errBuffer
+		err = cmd.Run()
+		if err != nil {
+			cmdErr = errors.New(errBuffer.String())
+		}
+
+	}
 	return
 }
 
