@@ -6,7 +6,7 @@ import catppuccin from "starlight-theme-catppuccin";
 // https://astro.build/config
 export default defineConfig({
 	site: "https://quentinrob.github.io",
-	base: "pkgs-manager",
+	base: "PkgsManager",
 	integrations: [
 		starlight({
 			title: 'PkgsManager',
