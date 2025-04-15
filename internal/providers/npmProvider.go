@@ -66,7 +66,7 @@ func (npm *NpmProvider) UpgradePackages() (err error, cmdErr error) {
 	cmd.Stderr = errBuffer
 	err = cmd.Run()
 	if err != nil {
-		err = errors.New("failed to update apt sources")
+		err = errors.New("failed to update npm sources")
 		cmdErr = errors.New(errBuffer.String())
 	}
 

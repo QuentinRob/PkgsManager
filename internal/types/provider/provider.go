@@ -32,6 +32,7 @@ const (
     Pip     Provider = "pip"
     Unknown Provider = "Unknown"
     Unset   Provider = ""
+    Snap    Provider = "snap"
 )
 
 func ToProvider(providerName string) Provider {
@@ -45,6 +46,8 @@ func ToProvider(providerName string) Provider {
         return NPM
         //    } else if providerName == string(Pip) {
         //        return Pip
+    } else if providerName == string(Snap) {
+        return Snap
     } else if providerName == string(Unset) {
         return Unset
     } else {

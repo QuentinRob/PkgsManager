@@ -83,6 +83,7 @@ func initProviders() (providersMap map[provider.Provider]providers.PackageProvid
 	providersMap[provider.NPM] = providers.NewNpmProvider()
 	providersMap[provider.Gem] = providers.NewGemProvider()
 	providersMap[provider.Golang] = providers.NewGoProvider()
+	providersMap[provider.Snap] = providers.NewSnapProvider()
 
 	return
 }
@@ -169,6 +170,8 @@ func formatProvider(pkgConfiguration *models.PackageConfiguration) (paddedProvid
 		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgRed)
 	} else if pkgConfiguration.Provider == provider.Pip {
 		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgCyan)
+	} else if pkgConfiguration.Provider == provider.Snap {
+		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgMagenta)
 	} else {
 		providerStyle = pterm.NewStyle(pterm.Bold, pterm.FgDefault)
 	}

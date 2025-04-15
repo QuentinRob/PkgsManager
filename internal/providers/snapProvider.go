@@ -30,19 +30,19 @@ import (
 	"qrobcis/pkgsmanager/internal/models"
 )
 
-type GoProvider struct {
+type SnapProvider struct {
 	*AbstractProvider
 }
 
-func (golang *GoProvider) InstallPackage(pkgConfiguration *models.PackageConfiguration) (err error, cmdErr error) {
-	packageNameVersionned := ""
+func (snap *SnapProvider) InstallPackage(pkgConfiguration *models.PackageConfiguration) (err error, cmdErr error) {
+
+	name, args := snap.buildCommand(snap.InstallCommand, false, pkgConfiguration.Name)
+
 	if pkgConfiguration.Version != "" {
-		packageNameVersionned = pkgConfiguration.Name + "@" + pkgConfiguration.Version
-	} else {
-		packageNameVersionned = pkgConfiguration.Name
+
+		args = append(args, "--classic", fmt.Sprintf("--%s", pkgConfiguration.Version))
 	}
 
-	name, args := golang.buildCommand(golang.InstallCommand, packageNameVersionned)
 	cmd := exec.Command(name, args...)
 
 	errBuffer := new(bytes.Buffer)
@@ -56,49 +56,26 @@ func (golang *GoProvider) InstallPackage(pkgConfiguration *models.PackageConfigu
 	return
 }
 
-func (golang *GoProvider) UpdateRegistry() (err error, cmdErr error) {
-	return
-}
-
-func (golang *GoProvider) UpgradePackages() (err error, cmdErr error) {
-	name, args := golang.buildCommand(golang.UpdateCommand)
-	cmd := exec.Command(name, args...)
-	errBuffer := new(bytes.Buffer)
-	cmd.Stderr = errBuffer
-	err = cmd.Run()
-	if err != nil {
-		err = errors.New("failed to update go sources")
-		cmdErr = errors.New(errBuffer.String())
-	}
+func (snap *SnapProvider) UpdateRegistry() (err error, cmdErr error) {
 
 	return
 }
 
-func (golang *GoProvider) CleanRegistry() (err error, cmdErr error) {
-	name, args := golang.buildCommand(golang.CleanCommand)
-	cmd := exec.Command(name, args...)
-	errBuffer := new(bytes.Buffer)
-	cmd.Stderr = errBuffer
-	err = cmd.Run()
-	if err != nil {
-		err = errors.New("failed to update go sources")
-		cmdErr = errors.New(errBuffer.String())
-	}
+func (snap *SnapProvider) CleanRegistry() (err error, cmdErr error) {
 
 	return
 }
 
-func (golang *GoProvider) buildCommand(subCommand string, options ...string) (name string, args []string) {
-	name = golang.Command
-	if golang.RequiresRoot == true {
+func (snap *SnapProvider) buildCommand(subCommand string, autoApprove bool, options ...string) (name string, args []string) {
+	name = snap.Command
+	if snap.RequiresRoot == true {
 		name = "sudo"
-		args = append(args, golang.Command)
+		args = append(args, snap.Command)
 	}
-
 	args = append(args, subCommand)
 
-	if subCommand == golang.CleanCommand {
-		args = append(args, "-cache")
+	if autoApprove == true {
+		args = append(args, "-y")
 	}
 
 	if len(options) > 0 {
@@ -108,15 +85,15 @@ func (golang *GoProvider) buildCommand(subCommand string, options ...string) (na
 	return
 }
 
-func NewGoProvider() *GoProvider {
-	return &GoProvider{
+func NewSnapProvider() *SnapProvider {
+	return &SnapProvider{
 		&AbstractProvider{
-			Command:          "go",
+			Command:          "snap",
 			InstallCommand:   "install",
 			UpdateCommand:    "",
-			CleanCommand:     "clean",
-			RequiresRoot:     false,
-			VersionSeparator: "@",
+			CleanCommand:     "",
+			RequiresRoot:     true,
+			VersionSeparator: "",
 		},
 	}
 }
